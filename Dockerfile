@@ -3,8 +3,8 @@ MAINTAINER Dmitrii Ageev <d.ageev@gmail.com>
 
 # Set environment
 ENV APPLICATION "xmind"
-ENV FILE "xmind-8-beta-linux_amd64.deb"
-ENV LINK "https://www.xmind.net/xmind/downloads/$FILE"
+ENV FILE "Xmind-for-Linux-amd64bit-26.01.07153-202512110451.deb"
+ENV LINK "https://dl3.xmind.app/${FILE}"
 ENV EXECUTABLE "/usr/bin/XMind"
 ENV SWT_GTK3 "0"
 
