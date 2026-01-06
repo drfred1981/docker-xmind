@@ -1,1 +1,1 @@
-/usr/bin/xmind
+/usr/bin/xmind --no-sandbox
