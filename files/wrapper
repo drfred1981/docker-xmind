@@ -1,82 +1,105 @@
 #!/bin/bash
 APPLICATION=$(basename $0)
-APP_USER=${APPLICATION}
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-# do we need to use sudo to start docker containers?
+# Sudo if user not in docker group
 ( id -Gn | grep -q docker ) || SUDO=sudo
 
 USER_UID=$(id -u)
 USER_GID=$(id -g)
 
-XSOCK=/tmp/.X11-unix
-XAUTH=/tmp/.docker.xauth
+# XMind data directory
+XMIND_DATA="${HOME}/.${APPLICATION}"
+mkdir -p "${XMIND_DATA}"
 
-DOWNLOAD_DIR=$(xdg-user-dir DOWNLOAD)
+# Download directory
+DOWNLOAD_DIR=$(xdg-user-dir DOWNLOAD 2>/dev/null)
 if [ -z "${DOWNLOAD_DIR}" ]; then
     DOWNLOAD_DIR="${HOME}/Downloads"
-fi;
+fi
+mkdir -p "${DOWNLOAD_DIR}"
 
-list_commands() {
-  echo ""
-  echo "Launch ${APPLICATION} using:"
-  echo "  ${APPLICATION} command"
-  echo ""
-  exit 1
+#############################################
+# CONFIGURATION - Modify these as needed
+#############################################
+HTTP_PORT="${XMIND_PORT:-3000}"
+HTTPS_PORT="${XMIND_HTTPS_PORT:-3001}"
+
+# TODO: Set your preferred authentication
+# Leave empty for no authentication
+KASM_USER="${XMIND_USER:-}"
+KASM_PASSWORD="${XMIND_PASSWORD:-}"
+#############################################
+
+show_help() {
+    echo ""
+    echo "Usage: ${APPLICATION} [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --help       Show this help"
+    echo "  --stop       Stop running container"
+    echo "  --logs       Show container logs"
+    echo ""
+    echo "Environment variables:"
+    echo "  XMIND_PORT          HTTP port (default: 3000)"
+    echo "  XMIND_HTTPS_PORT    HTTPS port (default: 3001)"
+    echo "  XMIND_USER          Username for web auth"
+    echo "  XMIND_PASSWORD      Password for web auth"
+    echo ""
+    exit 0
 }
 
-prepare_docker_env_parameters() {
-  ENV_VARS+=" --env=USER_UID=${USER_UID}"
-  ENV_VARS+=" --env=USER_GID=${USER_GID}"
-  ENV_VARS+=" --env=DISPLAY"
-  ENV_VARS+=" --env=XAUTHORITY=${XAUTH}"
-  ENV_VARS+=" --env=TZ=$(date +%Z)"
+stop_container() {
+    echo "Stopping ${APPLICATION}..."
+    ${SUDO} docker stop ${APPLICATION} 2>/dev/null
+    exit 0
 }
 
-prepare_docker_volume_parameters() {
-  touch ${XAUTH}
-  xauth nlist :0 | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
-
-  VOLUMES+=" --volume=${DOWNLOAD_DIR}:/home/${APP_USER}/Downloads"
-  VOLUMES+=" --volume=${HOME}/.${APPLICATION}:/home/${APP_USER}/.${APPLICATION}"
-  for FOLDER in cache local config pki; do
-    VOLUMES+=" --volume=${HOME}/.${APPLICATION}/.${FOLDER}:/home/${APP_USER}/.${FOLDER}"
-  done
-  VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
-  VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
-  VOLUMES+=" --volume=/run/user/${USER_UID}/pulse:/run/pulse"
+show_logs() {
+    ${SUDO} docker logs -f ${APPLICATION}
+    exit 0
 }
 
-prepare_docker_device_parameters() {
-  # Enumerate video devices
-  VIDEO_DEVICES=
-  for device in /dev/video* /dev/dri/*
-  do
-    if [ -c $device ]; then
-      VIDEO_DEVICES="${VIDEO_DEVICES} --device $device:$device"
-    fi
-  done
-}
-
-case $1 in
-  --help|help)
-    list_commands
-    exit 1
-    ;;
-  *)
-    ;;
+case "$1" in
+    --help|help|-h)
+        show_help
+        ;;
+    --stop|stop)
+        stop_container
+        ;;
+    --logs|logs)
+        show_logs
+        ;;
 esac
 
-prepare_docker_env_parameters
-prepare_docker_volume_parameters
-prepare_docker_device_parameters
+# Build environment variables
+ENV_VARS=""
+ENV_VARS+=" -e PUID=${USER_UID}"
+ENV_VARS+=" -e PGID=${USER_GID}"
+ENV_VARS+=" -e TZ=$(cat /etc/timezone 2>/dev/null || echo 'UTC')"
+ENV_VARS+=" -e CUSTOM_PORT=${HTTP_PORT}"
+ENV_VARS+=" -e CUSTOM_HTTPS_PORT=${HTTPS_PORT}"
+
+if [ -n "${KASM_USER}" ] && [ -n "${KASM_PASSWORD}" ]; then
+    ENV_VARS+=" -e CUSTOM_USER=${KASM_USER}"
+    ENV_VARS+=" -e PASSWORD=${KASM_PASSWORD}"
+fi
+
+# Build volume mounts
+VOLUMES=""
+VOLUMES+=" -v ${XMIND_DATA}:/config"
+VOLUMES+=" -v ${DOWNLOAD_DIR}:/config/Downloads"
 
 echo "Starting ${APPLICATION}..."
-${SUDO} docker run -d --rm \
-  --name ${APPLICATION} -h docker \
-  --cpuset-cpus 0 --memory 2048mb --net host \
-  ${ENV_VARS} \
-  ${VIDEO_DEVICES} \
-  ${VOLUMES} \
-  dmitriiageev/${APPLICATION} >/dev/null
+echo "Access via: http://localhost:${HTTP_PORT}"
 
+${SUDO} docker run -d --rm \
+    --name ${APPLICATION} \
+    --shm-size=512m \
+    -p ${HTTP_PORT}:3000 \
+    -p ${HTTPS_PORT}:3001 \
+    ${ENV_VARS} \
+    ${VOLUMES} \
+    dmitriiageev/${APPLICATION} >/dev/null
+
+echo "Container started. Use '${APPLICATION} --logs' to view logs."
