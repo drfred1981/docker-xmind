@@ -5,7 +5,7 @@ MAINTAINER Dmitrii Ageev <d.ageev@gmail.com>
 ENV APPLICATION "xmind"
 ENV FILE "Xmind-for-Linux-amd64bit-26.01.07153-202512110451.deb"
 ENV LINK "https://dl3.xmind.app/${FILE}"
-ENV EXECUTABLE "/usr/bin/XMind"
+ENV EXECUTABLE "/usr/bin/xmind"
 ENV SWT_GTK3 "0"
 
 # Install software package
